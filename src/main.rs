@@ -10,7 +10,6 @@ struct ConfigItem {
     url: String,
 }
 
-
 #[get("/{path}")]
 async fn check(path: web::Path<String>, data: web::Data<HashMap<String, ConfigItem>>) -> HttpResponse {
     let site = path.into_inner();
@@ -51,7 +50,7 @@ async fn check_status(expected_status: u16, url: &str) -> HttpResponse {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let json_config = fs::read_to_string("config.json")?;
+    let json_config = fs::read_to_string("config/config.json")?;
     let config: Vec<ConfigItem> = serde_json::from_str(&json_config)?;
 
     let mut hashed_items: HashMap<String, ConfigItem> = HashMap::new();
