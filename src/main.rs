@@ -60,12 +60,18 @@ async fn main() -> std::io::Result<()> {
         hashed_items.insert(item.name.clone(), item.clone());
     }
 
+    let host = "0.0.0.0";
+    let port = 8080;
+
+
+    println!("Starting server on {}:{}", host, port);
+    println!("{} sites configured", config.len());
     HttpServer::new(move || {
         App::new()
             .app_data(web::Data::new(hashed_items.clone()))
             .service(check)
     })
-    .bind(("127.0.0.1", 8080))?
+    .bind((host, port))?
     .run()
     .await
 }
