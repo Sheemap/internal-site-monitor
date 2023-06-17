@@ -1,43 +1,28 @@
-use actix_web::{web::{self, Data}, App, HttpResponse, HttpServer, get, HttpRequest};
+use actix_web::{web, App, HttpResponse, HttpServer, get};
 use serde::Deserialize;
-use std::fs;
+use serde_json;
+use std::{fs, collections::HashMap};
 
 #[derive(Deserialize, Clone, Debug)]
-struct Config {
-    jackett_url: String,
-    jackett_code: u16,
-    kopia_url: String,
-    kopia_code: u16,
+struct ConfigItem {
+    name: String,
+    status_code: u16,
+    url: String,
 }
 
-#[get("/jackett")]
-async fn jackett(req: HttpRequest) -> HttpResponse {
-    let config = req.app_data::<Data<Config>>();
 
-    match config {
-        Some(config) => {
-            check_status(config.jackett_code, &config.jackett_url).await
-        }
-        None => HttpResponse::InternalServerError().body("No config!"),
+#[get("/{path}")]
+async fn check(path: web::Path<String>, data: web::Data<HashMap<String, ConfigItem>>) -> HttpResponse {
+    let site = path.into_inner();
+
+    let site_config = data.get(&site as &str);
+    match site_config {
+        Some(c) => check_status(c.status_code, &c.url).await,
+        None => HttpResponse::InternalServerError().body("Not configured!"),
     }
-
 }
 
-#[get("/kopia")]
-async fn kopia(req: HttpRequest) -> HttpResponse {
-    let config = req.app_data::<Data<Config>>();
-
-    match config {
-        Some(config) => {
-            check_status(config.kopia_code, &config.kopia_url).await
-        }
-        None => HttpResponse::InternalServerError().body("No config!"),
-    }
-
-}
-
-
-async fn check_status(expected_status: u16, url: &String) -> HttpResponse {
+async fn check_status(expected_status: u16, url: &str) -> HttpResponse {
     let resp = reqwest::get(url).await;
     match resp {
         Ok(resp) => {
@@ -66,14 +51,19 @@ async fn check_status(expected_status: u16, url: &String) -> HttpResponse {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let toml_config = fs::read_to_string("config.toml")?;
-    let config: Config = toml::from_str(&toml_config).unwrap();
+    let json_config = fs::read_to_string("config.json")?;
+    let config: Vec<ConfigItem> = serde_json::from_str(&json_config)?;
+
+    let mut hashed_items: HashMap<String, ConfigItem> = HashMap::new();
+
+    for item in config.iter() {
+        hashed_items.insert(item.name.clone(), item.clone());
+    }
 
     HttpServer::new(move || {
         App::new()
-            .app_data(web::Data::new(config.clone()))
-            .service(jackett)
-            .service(kopia)
+            .app_data(web::Data::new(hashed_items.clone()))
+            .service(check)
     })
     .bind(("127.0.0.1", 8080))?
     .run()
