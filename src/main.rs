@@ -14,15 +14,28 @@ struct ConfigItem {
 async fn check(path: web::Path<String>, data: web::Data<HashMap<String, ConfigItem>>) -> HttpResponse {
     let site = path.into_inner();
 
-    let site_config = data.get(&site as &str);
-    match site_config {
-        Some(c) => check_status(c.status_code, &c.url).await,
-        None => HttpResponse::InternalServerError().body("Not configured!"),
+    let client_result = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build();
+
+    match client_result {
+        Ok(client) => {
+            let site_config = data.get(&site as &str);
+            match site_config {
+                Some(c) => check_status(client, c.status_code, &c.url).await,
+                None => HttpResponse::InternalServerError().body("Not configured!"),
+            }
+        }
+        Err(e) => {
+            println!("Error creating client: {:#?}", e);
+            HttpResponse::InternalServerError().body("Error creating client!")
+        }
     }
+
 }
 
-async fn check_status(expected_status: u16, url: &str) -> HttpResponse {
-    let resp = reqwest::get(url).await;
+async fn check_status(client: reqwest::Client, expected_status: u16, url: &str) -> HttpResponse {
+    let resp = client.get(url).send().await;
     match resp {
         Ok(resp) => {
             if resp.status().as_u16() == expected_status {
